@@ -87,3 +87,8 @@ A classic token with **no scopes** (public data only) is enough.
 
 If you ever do hit the limit, it backs off and falls back to simulated events so
 the globe is never dead.
+
+## Author & license
+
+**Mihajlo Stojanovski** — v1.0, July 2026
+Licensed under the [MIT License](LICENSE).

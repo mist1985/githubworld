@@ -166,6 +166,7 @@ onBeforeUnmount(() => {
         <span v-if="status.every" class="rl">· every {{ status.every }}s</span>
         <span v-if="status.remaining != null" class="rl">· {{ status.remaining }} req left</span>
       </div>
+      <p class="credit">Mihajlo Stojanovski · MIT License · v1.0 · July 2026</p>
     </header>
 
     <!-- Counters -->
@@ -323,6 +324,7 @@ h1 {
   color: transparent;
 }
 .sub { color: var(--dim); margin-top: 2px; }
+.credit { color: var(--dim); opacity: 0.55; margin-top: 10px; font-size: 11px; }
 
 .status {
   display: inline-flex;

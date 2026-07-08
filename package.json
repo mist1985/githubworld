@@ -2,6 +2,8 @@
   "name": "github-globe",
   "private": true,
   "version": "1.0.0",
+  "author": "Mihajlo Stojanovski",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
