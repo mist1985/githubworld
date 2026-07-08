@@ -1,10 +1,15 @@
 # GitHub Globe
 
-A rotating 3D globe that comes alive with GitHub's public activity. Every commit,
-star, pull request and issue from the [public Events API](https://docs.github.com/en/rest/activity/events)
-lands somewhere on Earth and bursts outward as a spray of colored particles.
+A rotating 3D globe (and flat map) that lights up with **live public GitHub
+activity**. Every commit, star, pull request and issue from the
+[public Events API](https://docs.github.com/en/rest/activity/events) lands on a
+city and glows, while a live ticker and leaderboards track the busiest repos,
+users, bots and countries.
 
-Built with **Vue 3** + **Three.js** + **Vite**.
+Built with **Vue 3** + **Three.js** + **Vite**. Runs as a static site — no
+backend required.
+
+🌍 **Live:** https://mist1985.github.io/githubworld/
 
 ![preview](preview.png)
 
@@ -12,26 +17,26 @@ Built with **Vue 3** + **Three.js** + **Vite**.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev        # http://localhost:5173
+npm run build      # production bundle in dist/
+npm run preview    # serve the production build
 ```
 
-Then `npm run build` / `npm run preview` for a production bundle.
+## Features
 
-## How it works
+- **Globe & Map views** — a textured 3D Earth (drag to rotate, scroll to zoom) or
+  a flat equirectangular world map. Toggle top-center.
+- **City lights** — each event glows on at its location for ~2s, then fades. Busy
+  cities light up again and again.
+- **Live ticker** — real commits/PRs/issues scroll by continuously (paced so they
+  stream smoothly instead of arriving in one clump).
+- **Leaderboards** — Top Repos, Top Users, Top Bots (kept separate), and Top
+  Countries with flags 🇺🇸🇮🇳🇯🇵 — all from **real** public-repo events.
+- **Starts where you are** — the globe opens facing your region (from your
+  timezone, refined by geolocation if you allow it).
+- **Responsive** — adapts to desktop, tablet and mobile.
 
-| Piece | File | Notes |
-|-------|------|-------|
-| Event stream | `src/github.js` | Polls `/events` (via a Vite proxy to dodge CORS), dedupes by id, respects GitHub's `X-Poll-Interval`, and **falls back to synthetic events** if the API is unreachable or rate-limited — so the globe is never dead. |
-| Geolocation | `src/locations.js` | GitHub doesn't expose event locations, so each actor is **deterministically hashed** onto one of ~34 world cities (weighted toward dev hubs) with a little jitter. The same author always lands in the same place. |
-| Rendering | `src/globe.js` | **Dotted-continents globe** — thousands of evenly spread points, kept only where they fall on land by sampling `public/earth.jpg` (an equirectangular Earth map) against the same lat/lng projection the bursts use. Plus an atmosphere glow shader, starfield, and a pooled particle system (6k particles) + ring-pulse pool for the bursts. |
-
-> `public/earth.jpg` (a 2048×1024 land map) is required for the continents. If it's missing the globe falls back to a uniform dotted sphere.
-| UI / loop | `src/App.vue` | Animation loop, drag-to-rotate / scroll-to-zoom, and the HUD (counters, legend, live ticker). |
-
-Events are dripped out of a queue a couple per frame rather than all at once, so a
-batch of 100 polled events reads as a lively continuous stream.
-
-### Colors
+### Event colors
 
 | Color | Event |
 |-------|-------|
@@ -41,43 +46,54 @@ batch of 100 polled events reads as a lively continuous stream.
 | 🔴 red | issue |
 | 🔵 blue | other |
 
+## How it works
+
+| Piece | File | Notes |
+|-------|------|-------|
+| Event stream | `src/github.js` | Polls `/events` (via a dev Vite proxy to dodge CORS; directly from the browser in production). Dedupes by id and **self-tunes the poll rate** to the rate-limit budget. A steady **heartbeat of simulated origin points** keeps the map glowing between GitHub's ~1/min refreshes. |
+| Geolocation | `src/locations.js` | GitHub doesn't expose event locations, so each actor is **deterministically hashed** onto one of ~34 world cities (weighted toward dev hubs), each tagged with an ISO country code for the flags. |
+| Rendering | `src/globe.js` | Textured Earth sphere + flat map (`public/earth.jpg`), atmosphere glow, starfield, and a pooled sprite system for the city-light dots. `fitCamera()` keeps the globe framed at any aspect ratio. |
+| UI / loop | `src/App.vue` | Animation loop, drag/zoom controls, geolocation start position, and the HUD (ticker, counters, leaderboards, footer). |
+
+> `public/earth.jpg` (an equirectangular Earth map) provides the globe/map
+> texture and is required.
+
+**Real vs. simulated:** the ticker, counters and leaderboards are driven by
+**real** GitHub events only. The map is lit by both real events and the
+simulated heartbeat, so it stays visually alive even while the API is between
+refreshes or rate-limited. Bots (`*[bot]`) are split into their own table so
+Top Users shows real people.
+
 ## Deploy to GitHub Pages
 
-It's a static site — no server needed. The browser calls `api.github.com`
-directly (GitHub allows CORS), assets use relative paths (`base: './'`), so it
-works from a project subpath.
-
-A workflow is included at `.github/workflows/deploy.yml`:
+It's a static site — the browser calls `api.github.com` directly (GitHub allows
+CORS) and assets use relative paths (`base: './'`), so it works from a project
+subpath. A workflow is included at `.github/workflows/deploy.yml`:
 
 1. Push this repo to GitHub with the default branch named `main`.
 2. In **Settings → Pages**, set **Source: GitHub Actions**.
 3. Push — the workflow builds and publishes automatically.
 
-On Pages it runs **unauthenticated** (60 req/hr per visitor IP → ~60s polling,
-still a continuous stream). **Do not** bake a token into the build — it would be
-public in the bundle. The token path (below) is for local runs only.
+On Pages it runs **unauthenticated**. **Do not** bake a token into the build — it
+would be public in the bundle. The token path below is for local runs only.
 
 ## How live is it?
 
 Two hard limits come from GitHub, not this app:
 
-1. **The public firehose is ~5 minutes delayed.** The newest event the `/events`
-   endpoint will ever hand you is about 5 minutes old. There is no lower-latency
-   public REST feed.
-2. **Rate limits.** Unauthenticated = **60 requests/hour**, and every poll costs
-   one request (even a `304 Not Modified` — I verified). So without a token the
-   fastest *sustainable* poll rate is ~60s.
+1. **The public feed is ~5 minutes delayed.** The newest event `/events` returns
+   is about 5 minutes old — there's no lower-latency public REST feed.
+2. **Rate limits are per IP.** Unauthenticated = **60 requests/hour per visitor
+   IP**, and every poll costs one request. So the sustainable poll rate without a
+   token is ~60s, and each visitor has their own independent budget.
 
-Within those limits the app is as live as possible: events light up **the instant
-a poll returns them** (no artificial delay), and the poll rate **self-tunes** to
-the remaining budget — spreading requests over the reset window so it never locks
-itself out.
+Within those limits it stays lively: real events are buffered and streamed into
+the ticker at a steady pace, and the heartbeat keeps the map glowing continuously.
 
-### Near-live: add a token
+### Near-live: add a token (local dev)
 
-A token raises the limit to **5,000/hour**, so the app polls every ~3s — new
-events appear within a few seconds (still bounded by GitHub's 5-min feed delay).
-The dev proxy attaches it server-side, so it never reaches the browser:
+A token raises the limit to **5,000/hour**, so it can poll every few seconds. The
+dev proxy attaches it **server-side**, so it never reaches the browser:
 
 ```bash
 GITHUB_TOKEN=ghp_your_token npm run dev
@@ -85,10 +101,16 @@ GITHUB_TOKEN=ghp_your_token npm run dev
 
 A classic token with **no scopes** (public data only) is enough.
 
-If you ever do hit the limit, it backs off and falls back to simulated events so
-the globe is never dead.
+## Privacy & security
+
+- Only **public** GitHub data is ever read; no private repos are or can be shown
+  through this API.
+- No auth is sent from the browser, no cookies, no tracking. Geolocation (if
+  granted) is used only to orient the globe and is never transmitted.
+- The optional token stays server-side in dev and is never in the build.
 
 ## Author & license
 
-**Mihajlo Stojanovski** — v1.0, July 2026
+**Mihajlo Stojanovski** — v1.0, July 2026 · [Contact](https://github.com/mist1985)
+
 Licensed under the [MIT License](LICENSE).
