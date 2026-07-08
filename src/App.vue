@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
 
     <footer class="hud bottom-center credit">
       Public GitHub activity · MIT · © 2026 Mihajlo Stojanovski ·
-      <a href="mailto:mihajlo.stojanovski@yahoo.com">mihajlo.stojanovski@yahoo.com</a>
+      <a href="https://github.com/mist1985" target="_blank" rel="noopener noreferrer">Contact</a>
     </footer>
   </div>
 </template>
