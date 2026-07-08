@@ -44,7 +44,8 @@ function normalize(ev) {
     actor: ev.actor?.login,
     lat: loc.lat,
     lng: loc.lng,
-    city: loc.name
+    city: loc.name,
+    cc: loc.cc
   }
 }
 
@@ -182,6 +183,7 @@ export function simulateBatch(n = 6) {
       lat: loc.lat,
       lng: loc.lng,
       city: loc.name,
+      cc: loc.cc,
       sim: true
     })
   }

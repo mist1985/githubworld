@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, reactive, computed } from 'vue'
 import { createGlobe } from './globe.js'
 import { createEventSource } from './github.js'
+import { countryFlag, COUNTRY_NAMES } from './locations.js'
 
 const canvasEl = ref(null)
 const status = reactive({ ok: false, note: 'connecting…', remaining: null, every: null })
@@ -12,6 +13,7 @@ const mode = ref('globe') // 'globe' | 'map'
 // Running tallies for the leaderboards (this session).
 const repoTally = reactive({})
 const userTally = reactive({})
+const countryTally = reactive({})
 function top5(tally) {
   return Object.entries(tally)
     .sort((a, b) => b[1] - a[1])
@@ -20,6 +22,13 @@ function top5(tally) {
 }
 const topRepos = computed(() => top5(repoTally))
 const topUsers = computed(() => top5(userTally))
+const topCountries = computed(() =>
+  top5(countryTally).map((c) => ({
+    ...c,
+    flag: countryFlag(c.name),
+    label: COUNTRY_NAMES[c.name] || c.name
+  }))
+)
 
 
 function setMode(m) {
@@ -132,6 +141,7 @@ onMounted(() => {
         counts.total++
         if (ev.repo) repoTally[ev.repo] = (repoTally[ev.repo] ?? 0) + 1
         if (ev.actor) userTally[ev.actor] = (userTally[ev.actor] ?? 0) + 1
+        if (ev.cc) countryTally[ev.cc] = (countryTally[ev.cc] ?? 0) + 1
       }
       feed.value = [...[...events].reverse(), ...feed.value].slice(0, 14)
     },
@@ -159,7 +169,7 @@ onBeforeUnmount(() => {
     <!-- Title -->
     <header class="hud top-left">
       <h1>GitHub&nbsp;Globe</h1>
-      <p class="sub">live public activity · cities light up where events land</p>
+      <p class="sub">live activity from public GitHub repositories</p>
       <div class="status" :class="{ live: status.ok }">
         <span class="dot"></span>
         <span>{{ status.note }}</span>
@@ -181,6 +191,16 @@ onBeforeUnmount(() => {
           <span class="cnt">{{ counts[l.kind].toLocaleString() }}</span>
         </li>
       </ul>
+
+      <div class="countries">
+        <div class="board-h">Top countries</div>
+        <div v-for="c in topCountries" :key="c.name" class="country-row">
+          <span class="c-flag">{{ c.flag }}</span>
+          <span class="c-name">{{ c.label }}</span>
+          <span class="c-n">{{ c.n.toLocaleString() }}</span>
+        </div>
+        <div v-if="!topCountries.length" class="board-empty">waiting…</div>
+      </div>
     </div>
 
     <!-- View toggle -->
@@ -319,13 +339,11 @@ canvas {
 }
 
 h1 {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  background: linear-gradient(90deg, #58a6ff, #a371f7 60%, #39d353);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #eef4ff;
+  text-shadow: 0 0 14px rgba(120, 170, 255, 0.55), 0 0 2px rgba(120, 170, 255, 0.7);
 }
 .sub { color: var(--dim); margin-top: 2px; }
 .bottom-center {
@@ -383,6 +401,20 @@ h1 {
 .legend .swatch { width: 9px; height: 9px; border-radius: 2px; box-shadow: 0 0 6px currentColor; }
 .legend .lbl { color: var(--dim); min-width: 84px; text-align: right; }
 .legend .cnt { color: var(--fg); min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.countries { margin-top: 16px; width: 210px; }
+.countries .board-h {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 7px;
+  text-align: right;
+}
+.country-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.country-row .c-flag { font-size: 15px; width: 20px; text-align: center; }
+.country-row .c-name { color: var(--fg); flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.country-row .c-n { color: #58a6ff; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
 
 .feed {
   width: min(46vw, 460px);
