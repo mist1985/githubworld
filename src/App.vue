@@ -10,10 +10,13 @@ const counts = reactive({ commit: 0, star: 0, pr: 0, issue: 0, other: 0, total: 
 const feed = ref([]) // recent events for the ticker
 const mode = ref('globe') // 'globe' | 'map'
 
-// Running tallies for the leaderboards (this session).
+// Running tallies for the leaderboards (this session). These count REAL GitHub
+// events only — the simulated heartbeat lights the map but never the panels.
 const repoTally = reactive({})
-const userTally = reactive({})
+const userTally = reactive({}) // human accounts
+const botTally = reactive({}) // *[bot] accounts, kept separate
 const countryTally = reactive({})
+const isBot = (login) => /\[bot\]$/i.test(login || '')
 function top5(tally) {
   return Object.entries(tally)
     .sort((a, b) => b[1] - a[1])
@@ -22,6 +25,7 @@ function top5(tally) {
 }
 const topRepos = computed(() => top5(repoTally))
 const topUsers = computed(() => top5(userTally))
+const topBots = computed(() => top5(botTally))
 const topCountries = computed(() =>
   top5(countryTally).map((c) => ({
     ...c,
@@ -62,6 +66,7 @@ onMounted(() => {
     renderer.setSize(w, h, false)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
+    globe.fitCamera() // keep the globe/map fully in frame at any aspect ratio
   }
   resize()
   window.addEventListener('resize', resize)
@@ -72,6 +77,30 @@ onMounted(() => {
   let dragging = false
   let last = { x: 0, y: 0 }
   let idleTimer = null
+
+  // Start the globe facing roughly the user's part of the world. The timezone
+  // gives an instant longitude estimate (no permission prompt); precise
+  // geolocation refines it if the user allows.
+  function faceLngLat(lng, lat) {
+    rot.y = (-90 - lng) * (Math.PI / 180)
+    // Positive tilt brings northern latitudes to the centre of the view.
+    rot.x = Math.max(-1.0, Math.min(1.0, (lat ?? 45) * (Math.PI / 180)))
+  }
+  // Timezone gives longitude; default to a northern latitude (most users) so it
+  // lands on Europe/US/Asia rather than the equator.
+  faceLngLat((-new Date().getTimezoneOffset() / 60) * 15, 48)
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        faceLngLat(p.coords.longitude, p.coords.latitude)
+        autoSpin = 0 // pause spin so the user lands on their location
+        clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => (autoSpin = 0.05), 6000)
+      },
+      () => {},
+      { timeout: 6000, maximumAge: 3600000 }
+    )
+  }
 
   function onDown(e) {
     dragging = true
@@ -132,18 +161,24 @@ onMounted(() => {
   // --- Event source ----------------------------------------------------------
   source = createEventSource({
     onEvents(events) {
-      // Every event lights the globe instantly (same place → a fresh flash each
-      // time) and streams into the feed, counters and leaderboards, so the left
-      // side always shows commits coming in.
+      // The map lights up for EVERY event (real + simulated heartbeat) so the
+      // globe stays alive. The feed, counters and leaderboards count REAL events
+      // only — real public repos — with bots kept in their own table.
+      const real = []
       for (const ev of events) {
         globe.burst(ev.lat, ev.lng, ev.kind)
+        if (ev.sim) continue
         counts[ev.kind] = (counts[ev.kind] ?? 0) + 1
         counts.total++
         if (ev.repo) repoTally[ev.repo] = (repoTally[ev.repo] ?? 0) + 1
-        if (ev.actor) userTally[ev.actor] = (userTally[ev.actor] ?? 0) + 1
+        if (ev.actor) {
+          const t = isBot(ev.actor) ? botTally : userTally
+          t[ev.actor] = (t[ev.actor] ?? 0) + 1
+        }
         if (ev.cc) countryTally[ev.cc] = (countryTally[ev.cc] ?? 0) + 1
+        real.push(ev)
       }
-      feed.value = [...[...events].reverse(), ...feed.value].slice(0, 14)
+      if (real.length) feed.value = [...real.reverse(), ...feed.value].slice(0, 14)
     },
     onStatus(s) {
       status.ok = s.ok
@@ -192,7 +227,7 @@ onBeforeUnmount(() => {
         </li>
       </ul>
 
-      <div class="countries">
+      <div class="side-table countries">
         <div class="board-h">Top countries</div>
         <div v-for="c in topCountries" :key="c.name" class="country-row">
           <span class="c-flag">{{ c.flag }}</span>
@@ -200,6 +235,16 @@ onBeforeUnmount(() => {
           <span class="c-n">{{ c.n.toLocaleString() }}</span>
         </div>
         <div v-if="!topCountries.length" class="board-empty">waiting…</div>
+      </div>
+
+      <div class="side-table bots">
+        <div class="board-h">Top bots</div>
+        <div v-for="b in topBots" :key="b.name" class="country-row">
+          <span class="c-flag">🤖</span>
+          <span class="c-name">{{ b.name }}</span>
+          <span class="c-n">{{ b.n.toLocaleString() }}</span>
+        </div>
+        <div v-if="!topBots.length" class="board-empty">waiting…</div>
       </div>
     </div>
 
@@ -402,8 +447,8 @@ h1 {
 .legend .lbl { color: var(--dim); min-width: 84px; text-align: right; }
 .legend .cnt { color: var(--fg); min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
 
-.countries { margin-top: 16px; width: 210px; }
-.countries .board-h {
+.side-table { margin-top: 16px; width: 210px; }
+.side-table .board-h {
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -450,4 +495,50 @@ h1 {
 .fade-enter-active { transition: all 0.4s ease; }
 .fade-enter-from { opacity: 0; transform: translateX(-8px); }
 .fade-move { transition: transform 0.4s ease; }
+
+/* --- Responsive: tablet --------------------------------------------------- */
+@media (max-width: 1024px) {
+  h1 { font-size: 18px; }
+  .hud { font-size: 11px; }
+  .left-mid { top: 114px; }
+  .boards { width: 172px; gap: 12px; }
+  .side-table { width: 180px; }
+  .counters .total .n { font-size: 24px; }
+  .feed { width: min(48vw, 340px); }
+  .hint { display: none; } /* avoid overlapping the centered footer */
+}
+
+/* --- Responsive: mobile --------------------------------------------------- */
+@media (max-width: 640px) {
+  .top-left { top: 12px; left: 14px; }
+  .top-right { top: 12px; right: 14px; }
+  .top-center { top: 12px; }
+  h1 { font-size: 15px; }
+  .sub { display: none; }
+  .status { margin-top: 6px; padding: 3px 8px; }
+  /* Keep it clean: hide the heavier side panels on phones. */
+  .left-mid { display: none; }
+  .legend { display: none; }
+  .counters .total { margin-bottom: 8px; }
+  .counters .total .n { font-size: 19px; }
+  .side-table { width: 150px; margin-top: 8px; }
+  .bots { display: none; } /* keep only countries on phones */
+  .toggle button { padding: 4px 12px; font-size: 11px; }
+  .feed {
+    width: 56vw;
+    max-height: 30vh;
+    bottom: 42px;
+    font-size: 10.5px;
+  }
+  .feed .loc { display: none; }
+  .hint { display: none; }
+  .bottom-center { bottom: 8px; }
+  .credit { font-size: 9px; white-space: normal; max-width: 94vw; line-height: 1.4; }
+}
+
+/* --- Responsive: very small phones ---------------------------------------- */
+@media (max-width: 380px) {
+  .side-table { display: none; }
+  .feed { width: 74vw; }
+}
 </style>

@@ -199,6 +199,21 @@ export function createGlobe(canvas) {
     light.life = light.maxLife
   }
 
+  // Pull the camera to a distance that fits the globe (or map) in the current
+  // viewport — including narrow portrait phones, where width is the limit.
+  function fitCamera() {
+    const t = Math.tan((camera.fov * Math.PI) / 360)
+    const a = camera.aspect || 1
+    if (mode === 'globe') {
+      const R = 1.32 // globe + atmosphere + margin
+      camera.position.setLength(Math.max(R / t, R / (t * a)))
+    } else {
+      const hh = (MAP_H / 2) * 1.06
+      const hw = (MAP_W / 2) * 1.06
+      camera.position.setLength(Math.max(hh / t, hw / (t * a)))
+    }
+  }
+
   // Switch between the 3D globe and the flat 2D map.
   function setMode(next) {
     if (next === mode) return
@@ -209,7 +224,7 @@ export function createGlobe(canvas) {
     atmosphere.visible = isGlobe
     mapGroup.visible = !isGlobe
     scene.fog = isGlobe ? fog : null
-    camera.position.setLength(isGlobe ? GLOBE_DIST : MAP_DIST)
+    fitCamera()
       // Reparent markers to the moving globe or the static map, and reproject.
       ; (isGlobe ? world : mapGroup).add(markerGroup)
     for (const l of lights) {
@@ -248,6 +263,7 @@ export function createGlobe(canvas) {
     burst,
     step,
     setMode,
+    fitCamera,
     getMode: () => mode,
     dispose() {
       renderer.dispose()
