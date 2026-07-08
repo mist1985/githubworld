@@ -230,7 +230,7 @@ onBeforeUnmount(() => {
 
     <!-- Title -->
     <header class="hud top-left">
-      <h1>GitHub&nbsp;Globe</h1>
+      <h1>GitHub&nbsp;World</h1>
       <p class="sub">live activity from public GitHub repositories</p>
       <div class="status" :class="{ live: status.ok }">
         <span class="dot"></span>

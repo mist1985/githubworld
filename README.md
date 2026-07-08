@@ -1,4 +1,4 @@
-# GitHub Globe
+# GitHub World
 
 A rotating 3D globe (and flat map) that lights up with **live public GitHub
 activity**. Every commit, star, pull request and issue from the
