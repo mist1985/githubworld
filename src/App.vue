@@ -52,6 +52,14 @@ let globe = null
 let source = null
 let raf = 0
 
+// Real events arrive in ~1/min bursts of 100. We buffer them and release into
+// the feed/leaderboards as a steady ~2/second trickle so commits keep scrolling
+// continuously instead of jumping in one clump. (The map is lit separately by
+// the heartbeat, so it never goes quiet.)
+const queue = []
+let releaseRate = 2
+let releaseAcc = 0
+
 onMounted(() => {
   globe = createGlobe(canvasEl.value)
   const { renderer, camera, scene, world, atmosphere } = globe
@@ -153,6 +161,25 @@ onMounted(() => {
       atmosphere.rotation.y = rot.y * 0.3
     }
 
+    // Release buffered real events into feed + leaderboards at a steady pace so
+    // commits keep scrolling continuously (each also lights its dot on the map).
+    releaseAcc += dt * releaseRate
+    while (queue.length && releaseAcc >= 1) {
+      releaseAcc -= 1
+      const ev = queue.shift()
+      globe.burst(ev.lat, ev.lng, ev.kind)
+      counts[ev.kind] = (counts[ev.kind] ?? 0) + 1
+      counts.total++
+      if (ev.repo) repoTally[ev.repo] = (repoTally[ev.repo] ?? 0) + 1
+      if (ev.actor) {
+        const t = isBot(ev.actor) ? botTally : userTally
+        t[ev.actor] = (t[ev.actor] ?? 0) + 1
+      }
+      if (ev.cc) countryTally[ev.cc] = (countryTally[ev.cc] ?? 0) + 1
+      feed.value = [ev, ...feed.value].slice(0, 14)
+    }
+    if (!queue.length) releaseAcc = 0
+
     globe.step(dt)
     renderer.render(scene, camera)
   }
@@ -160,25 +187,25 @@ onMounted(() => {
 
   // --- Event source ----------------------------------------------------------
   source = createEventSource({
-    onEvents(events) {
-      // The map lights up for EVERY event (real + simulated heartbeat) so the
-      // globe stays alive. The feed, counters and leaderboards count REAL events
-      // only — real public repos — with bots kept in their own table.
-      const real = []
+    onEvents(events, pollMs) {
+      // Simulated heartbeat events light the map immediately (keep it alive).
+      // Real events are buffered and released as a steady trickle so the feed
+      // and leaderboards scroll continuously rather than in one clump.
+      let real = 0
       for (const ev of events) {
-        globe.burst(ev.lat, ev.lng, ev.kind)
-        if (ev.sim) continue
-        counts[ev.kind] = (counts[ev.kind] ?? 0) + 1
-        counts.total++
-        if (ev.repo) repoTally[ev.repo] = (repoTally[ev.repo] ?? 0) + 1
-        if (ev.actor) {
-          const t = isBot(ev.actor) ? botTally : userTally
-          t[ev.actor] = (t[ev.actor] ?? 0) + 1
+        if (ev.sim) {
+          globe.burst(ev.lat, ev.lng, ev.kind)
+        } else {
+          queue.push(ev)
+          real++
         }
-        if (ev.cc) countryTally[ev.cc] = (countryTally[ev.cc] ?? 0) + 1
-        real.push(ev)
       }
-      if (real.length) feed.value = [...real.reverse(), ...feed.value].slice(0, 14)
+      if (real > 0) {
+        // Spread the real backlog across the poll interval so it lasts until the
+        // next batch arrives — a continuous stream, no gaps, no clump.
+        const secs = Math.max((pollMs || 30000) / 1000, 20)
+        releaseRate = Math.min(Math.max(queue.length / secs, 1), 8)
+      }
     },
     onStatus(s) {
       status.ok = s.ok
