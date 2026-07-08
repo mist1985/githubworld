@@ -166,7 +166,6 @@ onBeforeUnmount(() => {
         <span v-if="status.every" class="rl">· every {{ status.every }}s</span>
         <span v-if="status.remaining != null" class="rl">· {{ status.remaining }} req left</span>
       </div>
-      <p class="credit">Mihajlo Stojanovski · MIT License · v1.0 · July 2026</p>
     </header>
 
     <!-- Counters -->
@@ -222,6 +221,11 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="hud bottom-right hint">drag to rotate · scroll to zoom</div>
+
+    <footer class="hud bottom-center credit">
+      Public GitHub activity · MIT · © 2026 Mihajlo Stojanovski ·
+      <a href="mailto:mihajlo.stojanovski@yahoo.com">mihajlo.stojanovski@yahoo.com</a>
+    </footer>
   </div>
 </template>
 
@@ -324,7 +328,21 @@ h1 {
   color: transparent;
 }
 .sub { color: var(--dim); margin-top: 2px; }
-.credit { color: var(--dim); opacity: 0.55; margin-top: 10px; font-size: 11px; }
+.bottom-center {
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.credit {
+  color: var(--dim);
+  opacity: 0.7;
+  font-size: 11px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.credit a { color: var(--fg); text-decoration: none; }
+.credit a:hover { text-decoration: underline; }
 
 .status {
   display: inline-flex;
